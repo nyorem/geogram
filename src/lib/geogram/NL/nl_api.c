@@ -55,7 +55,7 @@
 
 /*****************************************************************************/
 
-static NLSparseMatrix* nlGetCurrentSparseMatrix() {
+NLSparseMatrix* nlGetCurrentSparseMatrix() {
     NLSparseMatrix* result = NULL;
     switch(nlCurrentContext->matrix_mode) {
 	case NL_STIFFNESS_MATRIX: {

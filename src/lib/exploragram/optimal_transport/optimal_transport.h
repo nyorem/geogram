@@ -489,8 +489,19 @@ namespace GEO {
 	void set_initial_weight(index_t i, double w) {
 	    weights_[i] = w;
 	}
-	
-    protected:
+    /**
+     * \brief Computes the objective function, its gradient and its Hessian.
+     * \details Gradient and Hessian are used to solve a Newton
+     *  step H p = -g
+     * \param[in] n number of variables
+     * \param[in] w current value of the variables
+     * \param[out] f current value of the objective function
+     * \param[out] g gradient of the objective function
+     */
+    void eval_func_grad_Hessian(
+        index_t n, const double* w,
+        double& f, double* g
+    );
 
 	/**
 	 * \brief Gets the mass of the Dirac associated with point p.
@@ -499,6 +510,9 @@ namespace GEO {
 	double nu(index_t p) const {
 	  return nu_.size() == 0 ? constant_nu_ : nu_[p];
 	}
+	
+    protected:
+
 
 	
         /**
@@ -530,19 +544,6 @@ namespace GEO {
 	 */
 	virtual void call_callback_on_RVD() = 0;
 	
-        /**
-         * \brief Computes the objective function, its gradient and its Hessian.
-         * \details Gradient and Hessian are used to solve a Newton
-         *  step H p = -g
-         * \param[in] n number of variables
-         * \param[in] w current value of the variables
-         * \param[out] f current value of the objective function
-         * \param[out] g gradient of the objective function
-         */
-        void eval_func_grad_Hessian(
-            index_t n, const double* w,
-            double& f, double* g
-        );
 
         /**
          * \brief Computes the stopping criterion of the solver.

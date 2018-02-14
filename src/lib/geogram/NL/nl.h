@@ -1399,8 +1399,9 @@ NLAPI void NLAPIENTRY nlMatrixMode(NLenum matrix);
      * \brief Specifies user functions for printing messages.
      */
     NLAPI void NLAPIENTRY nlPrintfFuncs(NLprintfFunc f1, NLfprintfFunc f2);
-    
-    
+
+    #include "nl_matrix.h"
+    NLAPIENTRY NLSparseMatrix* NLAPIENTRY nlGetCurrentSparseMatrix();
 /**
  * @}
  */    
