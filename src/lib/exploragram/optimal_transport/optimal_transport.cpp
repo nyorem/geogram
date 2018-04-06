@@ -351,8 +351,8 @@ namespace GEO {
 	    FOR(i,n) {
 		total_nu += nu(i);
 	    }
-	    std::cerr << "total nu=" << total_nu << std::endl;
-	    std::cerr << "total mass=" << total_mass_ << std::endl;
+        Logger::out("OTM") << "total nu=" << total_nu << std::endl;
+        Logger::out("OTM") << "total mass=" << total_mass_ << std::endl;
 	    if(::fabs(total_nu - total_mass_)/total_mass_ > 0.01) {
 		Logger::warn("OTM") << "Specified nu do not sum to domain measure"
 				    << std::endl;

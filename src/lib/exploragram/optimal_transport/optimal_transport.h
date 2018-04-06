@@ -711,7 +711,7 @@ namespace GEO {
         RestrictedVoronoiDiagram_var RVD_;
         vector<double> points_dimp1_;
         vector<double> weights_;
-        double total_mass_;
+        mutable double total_mass_;
         double constant_nu_; /**< \brief Value of one of the Diracs if cte. */
 	vector<double> nu_;  /**< \brief Value of all the Diracs. */
         double epsilon_;

@@ -452,6 +452,7 @@ namespace GEO {
             }
             result += tri_mass;
         }
+        total_mass_ = result;
 	return result;
     }
 

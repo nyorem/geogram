@@ -726,6 +726,7 @@ namespace GEO {
             }
             result += tet_mass;
         }
+        total_mass_ = result;
 	return result;
     }
     
