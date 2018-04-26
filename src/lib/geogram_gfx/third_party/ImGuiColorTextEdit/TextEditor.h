@@ -1,10 +1,8 @@
 #pragma once
 
-// [Bruno Levy] For the older mac that does not have
-// regex support, deactivate syntax highlighting
-#if defined(__APPLE__) && !defined(MAC_OS_X_VERSION_10_12)
-#define GEO_OLD_COMPILER
-#endif
+// [Bruno Levy] For the older compilers that does not have
+// regex support, uncomment to deactivate syntax highlighting
+// #define GEO_OLD_COMPILER
 
 #include <string>
 #include <vector>
@@ -68,6 +66,19 @@ namespace std {
 // [Bruno Levy] include path redirected to geogram.
 #include <geogram_gfx/api/defs.h>
 #include <geogram_gfx/third_party/ImGui/imgui.h>
+
+// [Bruno Levy] additional callback type.
+enum TextEditorAction {
+    TEXT_EDITOR_RUN, TEXT_EDITOR_SAVE,
+    TEXT_EDITOR_FIND, TEXT_EDITOR_STOP,
+    TEXT_EDITOR_TOOLTIP,
+    TEXT_EDITOR_COMPLETION,
+    TEXT_EDITOR_TEXT_CHANGED
+};
+
+typedef void (*TextEditorCallback)(
+    TextEditorAction action, void* client_data
+);
 
 class GEOGRAM_GFX_API TextEditor
 {
@@ -234,13 +245,28 @@ public:
 	void SetPalette(const Palette& aValue);
 
 	void SetErrorMarkers(const ErrorMarkers& aMarkers) { mErrorMarkers = aMarkers; }
+	const ErrorMarkers& GetErrorMarkers() const { return mErrorMarkers; } //[Bruno]
+	
 	void SetBreakpoints(const Breakpoints& aMarkers) { mBreakpoints = aMarkers; }
-
+	const Breakpoints& GetBreakpoints() const { return mBreakpoints; } //[Bruno]
+	
 	void Render(const char* aTitle, const ImVec2& aSize = ImVec2(), bool aBorder = false);
 	void SetText(const std::string& aText);
 	std::string GetText() const;
+	//[Bruno] made public
+	std::string GetText(const Coordinates& aStart, const Coordinates& aEnd) const;	
 	std::string GetSelectedText() const;
-
+	Coordinates GetSelectionStart() const {
+	    return mState.mSelectionStart;
+	}
+	Coordinates GetSelectionEnd() const {
+	    return mState.mSelectionEnd;
+	}
+	int nbLines() const {
+	    return int(mLines.size());
+	}
+	std::string GetLine(int line) const; 
+	
 	int GetTotalLines() const { return (int)mLines.size(); }
 	bool IsOverwrite() const { return mOverwrite; }
 
@@ -248,6 +274,10 @@ public:
 	bool IsReadOnly() const { return mReadOnly; }
 
 	Coordinates GetCursorPosition() const { return GetActualCursorCoordinates(); }
+
+	// [Bruno Levy] added this function.
+	Coordinates GetMousePosition() const { return ScreenPosToCoordinates(ImGui::GetMousePos()); }
+	
 	void SetCursorPosition(const Coordinates& aPosition);
 
 	void InsertText(const std::string& aValue);
@@ -281,6 +311,12 @@ public:
 	static const Palette& GetDarkPalette();
 	static const Palette& GetLightPalette();
 
+	// [Bruno Levy] gets the text source element under the pointer
+	// when a tooltip should be displayed.
+	const std::string& GetWordContext() const {
+	    return word_context_;
+	}
+	
 private:
 
 // [Bruno Levy] Made syntax hightlighting optional	
@@ -338,7 +374,7 @@ private:
 	void EnsureCursorVisible();
 	int GetPageSize() const;
 	int AppendBuffer(std::string& aBuffer, char chr, int aIndex);
-	std::string GetText(const Coordinates& aStart, const Coordinates& aEnd) const;
+
 	Coordinates GetActualCursorCoordinates() const;
 	Coordinates SanitizeCoordinates(const Coordinates& aValue) const;
 	void Advance(Coordinates& aCoordinates) const;
@@ -348,6 +384,14 @@ private:
 	Coordinates ScreenPosToCoordinates(const ImVec2& aPosition) const;
 	Coordinates FindWordStart(const Coordinates& aFrom) const;
 	Coordinates FindWordEnd(const Coordinates& aFrom) const;
+
+	// [Bruno Levy] additional function for finding the context for
+	//  tooltips
+	bool IsWordContextBoundary(char c) const;
+	Coordinates FindWordContextStart(const Coordinates& aFrom) const;
+	Coordinates FindWordContextEnd(const Coordinates& aFrom) const;
+	std::string GetWordContextAt(const Coordinates & aCoords) const;
+	
 	bool IsOnWordBoundary(const Coordinates& aAt) const;
 	void RemoveLine(int aStart, int aEnd);
 	void RemoveLine(int aIndex);
@@ -384,5 +428,18 @@ private:
 	ErrorMarkers mErrorMarkers;
 	ImVec2 mCharAdvance;
 	Coordinates mInteractiveStart, mInteractiveEnd;
+
+// [Bruno Levy] Additional callback.
+  public:
+	void set_callback(
+	    TextEditorCallback cb, void* cb_cli_data = NULL
+	) {
+	    callback_ = cb;
+	    callback_client_data_ = cb_cli_data;
+	}
+  private:
+	TextEditorCallback callback_;
+	void* callback_client_data_;
+	std::string word_context_;
 };
 

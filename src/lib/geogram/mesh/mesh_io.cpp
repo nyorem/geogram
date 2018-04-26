@@ -1338,7 +1338,7 @@ namespace GEO {
                 
                 if(!ply_read(ply)) {
                     Logger::err("I/O")
-                        << "Problem occured while parsing PLY file"
+                        << "Problem occurred while parsing PLY file"
                         << std::endl;
                     ply_close(ply);
                     return false;
@@ -1461,7 +1461,7 @@ namespace GEO {
              * \brief The vertex callback, called for each vertex 
              *  of the input file.
              * \param[in] argument the generic opaque argument 
-             *  (from which this PlyLoader is retreived).
+             *  (from which this PlyLoader is retrieved).
              * \return callback status code, zero for errors, 
              *  non-zero for success.
              */
@@ -1473,7 +1473,7 @@ namespace GEO {
              * \brief The facet callback, called for each facet 
              *  of the input file.
              * \param[in] argument the generic opaque argument 
-             *  (from which this PlyLoader is retreived).
+             *  (from which this PlyLoader is retrieved).
              * \return callback status code, zero for errors, 
              *  non-zero for success.
              */
@@ -1485,7 +1485,7 @@ namespace GEO {
              * \brief The triangle strip callback, 
              *  called for each triangle strip of the input file.
              * \param[in] argument the generic opaque argument 
-             *  (from which this PlyLoader is retreived).
+             *  (from which this PlyLoader is retrieved).
              * \return callback status code, zero for errors, 
              *  non-zero for success.
              */
@@ -1497,7 +1497,7 @@ namespace GEO {
              * \brief The color callback, called for 
              *  each color data of the input file.
              * \param[in] argument the generic opaque argument 
-             *  (from which this PlyLoader is retreived).
+             *  (from which this PlyLoader is retrieved).
              * \return callback status code, zero for errors, 
              *  non-zero for success.
              */
@@ -4098,7 +4098,7 @@ namespace GEO {
 	}
 	
 	/**
-	 * \brief Gets a key to be able to retreive facet indices.
+	 * \brief Gets a key to be able to retrieve facet indices.
 	 * \param[in] M a reference to a mesh
 	 * \param[in] f a facet of the mesh
 	 * \param[in] vertex_id an Id attribute attached to the vertices
@@ -4139,8 +4139,6 @@ namespace GEO {
 	}
 	
     };
-    
-    
 }
 
 /****************************************************************************/
