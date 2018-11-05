@@ -261,8 +261,9 @@ void glupBindUniformState(GLUPuint program) {
 }
 
 
-#if defined(GEO_OS_EMSCRIPTEN) || defined(GEO_OS_APPLE)
-#else
+#if !defined(GEO_OS_EMSCRIPTEN) && \
+    !defined(GEO_OS_APPLE) && \
+    !defined(GEO_OS_ANDROID)
 
 /**
  * \brief Tests whether tessellation shaders are supported by OpenGL.
@@ -323,7 +324,7 @@ GLUPcontext glupCreateContext() {
       
 #if defined(GEO_OS_EMSCRIPTEN) || defined(GEO_OS_APPLE) || defined(GEO_OS_ANDROID)
 	GLUP_profile = "GLUPES2";
-	// GLUP_profile = "GLUP150"; // Does something but bugged / not fully functional.
+//	GLUP_profile = "GLUP150"; // Does something but bugged / not fully functional.
 #else
       GEO_CHECK_GL();      
       double GLSL_version = GEO::GLSL::supported_language_version();

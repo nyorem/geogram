@@ -81,6 +81,30 @@ namespace {
 #endif    
 
 
+// [Bruno Levy] functions for management of HighDPI displays.
+namespace {
+#if defined(__EMSCRIPTEN__) || defined(__ANDROID__)
+    double pixel_ratio() {
+	return 1.0;
+    }    
+#else
+    /**
+     * \brief Computes the pixel ratio for hidpi devices.
+     * \details Uses the current GLFW window.
+     */
+    double pixel_ratio() {
+	int buf_size[2];
+	int win_size[2];
+	GLFWwindow* window = glfwGetCurrentContext();
+	glfwGetFramebufferSize(window, &buf_size[0], &buf_size[1]);
+	glfwGetWindowSize(window, &win_size[0], &win_size[1]);
+	return double(buf_size[0]) / double(win_size[0]);
+    }
+#endif
+    
+}
+
+
 TextEditor::TextEditor()
 	: mLineSpacing(0.0f)
 	, mUndoIndex(0)
@@ -473,7 +497,10 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 	// [Bruno Levy] read font size from current font (instead of default font)
 	ImGuiContext& g = *GImGui;
 	auto xadv = (g.Font->IndexAdvanceX['X']);
-	mCharAdvance = ImVec2(xadv, g.Font->FontSize + mLineSpacing); // TODO: apply pixel scaling for HiDPI displays.
+
+	// [Bruno Levy] apply highdpi scaling
+	float s = 1.0f / float(pixel_ratio());
+	mCharAdvance = ImVec2(s*xadv, s*(g.Font->FontSize + mLineSpacing)); // TODO: apply pixel scaling for HiDPI displays.
 
         //[Bruno Levy] commented-out (I prefer to use default style)
         // ImGui::PushStyleColor(ImGuiCol_ChildWindowBg, ImGui::ColorConvertU32ToFloat4(mPalette[(int)PaletteIndex::Background]));
@@ -624,7 +651,7 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 					SetSelection(mInteractiveStart, mInteractiveEnd, mSelectionMode);
 				}
 
-				lastClick = ImGui::GetTime();
+				lastClick = float(ImGui::GetTime());
 			}
 			else if (click)
 			{
@@ -635,7 +662,7 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 					mSelectionMode = SelectionMode::Normal;
 				SetSelection(mInteractiveStart, mInteractiveEnd, mSelectionMode);
 
-				lastClick = ImGui::GetTime();
+				lastClick = float(ImGui::GetTime());
 			}
 			else if (ImGui::IsMouseDragging(0) && ImGui::IsMouseDown(0))
 			{
