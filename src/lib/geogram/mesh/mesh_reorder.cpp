@@ -294,17 +294,16 @@ namespace {
          */
         double center(index_t f) const {
             double result = 0.0;
+	    double s = 1.0 / double(mesh_.facets.nb_vertices(f));
             for(
                 index_t c = mesh_.facets.corners_begin(f);
                 c < mesh_.facets.corners_end(f); ++c
             ) {
-                result += mesh_.vertices.point_ptr(
+                result += s*mesh_.vertices.point_ptr(
                     mesh_.facet_corners.vertex(c)
-                )[COORD];
+		)[COORD]; 
             }
             return result;
-            // TODO: should be  / double(mesh_.facets.nb_vertices(f));
-            // but this breaks one of the tests, to be investigated...
         }
 
     private:
@@ -791,7 +790,7 @@ namespace {
         ) :
             M_(M)
         {
-            geo_debug_assert(e > b);
+            geo_debug_assert(e >= b);
 	    geo_cite_with_info(
 		"WEB:SpatialSorting",
 		"The implementation of spatial sort in GEOGRAM is inspired by "
@@ -1470,7 +1469,7 @@ namespace GEO {
        
         //The next three lines replace the following commented-out line
         //(random_shuffle is deprecated in C++17, and they call this 
-        // progess...)
+        // progress...)
         // std::random_shuffle(b,e);
         std::random_device rng;
         std::mt19937 urng(rng());

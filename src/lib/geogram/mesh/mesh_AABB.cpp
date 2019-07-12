@@ -203,7 +203,6 @@ namespace {
      * \param[out] nearest_p the point of facet \p f nearest to \p p
      * \param[out] squared_dist the squared distance between
      *  \p p and \p nearest_p
-     * \pre the mesh \p M is triangulated
      */
     void get_point_facet_nearest_point(
         const Mesh& M,
@@ -212,17 +211,34 @@ namespace {
         vec3& nearest_p,
         double& squared_dist
     ) {
-        geo_debug_assert(M.facets.nb_vertices(f) == 3);
-        index_t c = M.facets.corners_begin(f);
-        const vec3& p1 = Geom::mesh_vertex(M, M.facet_corners.vertex(c));
-        ++c;
-        const vec3& p2 = Geom::mesh_vertex(M, M.facet_corners.vertex(c));
-        ++c;
-        const vec3& p3 = Geom::mesh_vertex(M, M.facet_corners.vertex(c));
-        double lambda1, lambda2, lambda3;  // barycentric coords, not used.
-        squared_dist = Geom::point_triangle_squared_distance(
-            p, p1, p2, p3, nearest_p, lambda1, lambda2, lambda3
-        );
+        if(M.facets.nb_vertices(f) == 3) {
+	    index_t c = M.facets.corners_begin(f);
+	    const vec3& p1 = Geom::mesh_vertex(M, M.facet_corners.vertex(c));
+	    const vec3& p2 = Geom::mesh_vertex(M, M.facet_corners.vertex(c+1));
+	    const vec3& p3 = Geom::mesh_vertex(M, M.facet_corners.vertex(c+2));
+	    double lambda1, lambda2, lambda3;  // barycentric coords, not used.
+	    squared_dist = Geom::point_triangle_squared_distance(
+		p, p1, p2, p3, nearest_p, lambda1, lambda2, lambda3
+	    );
+	} else {
+	    squared_dist = Numeric::max_float64();
+	    index_t c1 = M.facets.corners_begin(f);
+	    const vec3& p1 = Geom::mesh_vertex(M, M.facet_corners.vertex(c1));
+	    for(index_t c2 = c1+1; c2+1<M.facets.corners_end(f); ++c2) {
+		const vec3& p2 = Geom::mesh_vertex(M, M.facet_corners.vertex(c2));
+		index_t c3 = c2+1;
+		const vec3& p3 = Geom::mesh_vertex(M, M.facet_corners.vertex(c3));
+		double lambda1, lambda2, lambda3;  // barycentric coords, not used.
+		vec3 cur_nearest_p;
+		double cur_squared_dist = Geom::point_triangle_squared_distance(
+		    p, p1, p2, p3, cur_nearest_p, lambda1, lambda2, lambda3
+		);
+		if(cur_squared_dist < squared_dist) {
+		    squared_dist = cur_squared_dist;
+		    nearest_p = cur_nearest_p;
+		}
+	    }
+	}
     }
 
     /**
@@ -297,17 +313,13 @@ namespace {
      * \param[in] M a const reference to the mesh
      * \param[in] t the index of the tetrahedron in \p M
      * \param[in] p a const reference to the point
-     * \param[in] exact specifies whether exact predicates should be used
      * \retval true if the tetrahedron \p t or its boundary contains 
      *  the point \p p
      * \retval false otherwise
      */
     bool mesh_tet_contains_point(
-        const Mesh& M, index_t t, const vec3& p, bool exact = true
+	const Mesh& M, index_t t, const vec3& p
     ) {
-        // Inexact mode is not implemented yet.
-        geo_argused(exact);
-
         const vec3& p0 = Geom::mesh_vertex(M, M.cells.vertex(t,0));
         const vec3& p1 = Geom::mesh_vertex(M, M.cells.vertex(t,1));
         const vec3& p2 = Geom::mesh_vertex(M, M.cells.vertex(t,2));
@@ -537,8 +549,11 @@ namespace {
 
 	// There is no intersection if the interval is empty (tmin > tmax)
 	// or if the interval is outside [0,1]
+	// Note: the test is tmin <= tmax, because a bbox can be infinitely
+	// thin (for instance, the bbox of a triangle orthogonal to one
+	// of the axes).
 	
-	return (tmax >= 0.0) && (tmin < tmax) && (tmin <= 1.0);
+	return (tmax >= 0.0) && (tmin <= tmax) && (tmin <= 1.0);
     }
 
 
@@ -548,28 +563,33 @@ namespace {
 
 namespace GEO {
 
+    MeshFacetsAABB::MeshFacetsAABB() : mesh_(nullptr) {
+    }
+    
     MeshFacetsAABB::MeshFacetsAABB(
         Mesh& M, bool reorder
-    ) :
-        mesh_(M) {
-        if(!M.facets.are_simplices()) {
-            mesh_repair(
-		M, MeshRepairMode(MESH_REPAIR_TRIANGULATE | MESH_REPAIR_QUIET)
-	    );
-        }
+    ) {
+	initialize(M, reorder);
+    }
+
+    void MeshFacetsAABB::initialize(
+        Mesh& M, bool reorder
+    ) {
+        mesh_ = &M;
         if(reorder) {
-            mesh_reorder(mesh_, MESH_ORDER_MORTON);
+            mesh_reorder(*mesh_, MESH_ORDER_MORTON);
         }
         bboxes_.resize(
             max_node_index(
-                1, 0, mesh_.facets.nb()
+                1, 0, mesh_->facets.nb()
             ) + 1 // <-- this is because size == max_index + 1 !!!
         );
         init_bboxes_recursive(
-            mesh_, bboxes_, 1, 0, mesh_.facets.nb(), get_facet_bbox
+            *mesh_, bboxes_, 1, 0, mesh_->facets.nb(), get_facet_bbox
         );
     }
 
+    
     void MeshFacetsAABB::get_nearest_facet_hint(
         const vec3& p,
         index_t& nearest_f, vec3& nearest_point, double& sq_dist
@@ -581,7 +601,7 @@ namespace GEO {
         // For a large mesh (20M facets) this gains up to 10%
         // performance as compared to picking nearest_f randomly.
         index_t b = 0;
-        index_t e = mesh_.facets.nb();
+        index_t e = mesh_->facets.nb();
         index_t n = 1;
         while(e != b + 1) {
             index_t m = b + (e - b) / 2;
@@ -600,10 +620,10 @@ namespace GEO {
         }
         nearest_f = b;
 
-        index_t v = mesh_.facet_corners.vertex(
-            mesh_.facets.corners_begin(nearest_f)
+        index_t v = mesh_->facet_corners.vertex(
+            mesh_->facets.corners_begin(nearest_f)
         );
-        nearest_point = Geom::mesh_vertex(mesh_, v);
+        nearest_point = Geom::mesh_vertex(*mesh_, v);
         sq_dist = Geom::distance2(p, nearest_point);
     }
 
@@ -620,7 +640,7 @@ namespace GEO {
             vec3 cur_nearest_point;
             double cur_sq_dist;
             get_point_facet_nearest_point(
-                mesh_, p, b, cur_nearest_point, cur_sq_dist
+                *mesh_, p, b, cur_nearest_point, cur_sq_dist
             );
             if(cur_sq_dist < sq_dist) {
                 nearest_f = b;
@@ -678,7 +698,7 @@ namespace GEO {
 	    1.0/(q2.y-q1.y),
 	    1.0/(q2.z-q1.z)
 	);
-	return segment_intersection_recursive(q1, q2, dirinv, 1, 0, mesh_.facets.nb());
+	return segment_intersection_recursive(q1, q2, dirinv, 1, 0, mesh_->facets.nb());
     }
 
     bool MeshFacetsAABB::segment_intersection_recursive(
@@ -688,7 +708,7 @@ namespace GEO {
 	    return false;
 	}
         if(b + 1 == e) {
-	    return segment_mesh_facet_intersection(q1, q2, mesh_, b);
+	    return segment_mesh_facet_intersection(q1, q2, *mesh_, b);
 	}
         index_t m = b + (e - b) / 2;
         index_t childl = 2 * n;
@@ -710,7 +730,7 @@ namespace GEO {
 	f = index_t(-1);
 	t = Numeric::max_float64();
 	segment_nearest_intersection_recursive(
-	    q1, q2, dirinv, 1, 0, mesh_.facets.nb(), t, f
+	    q1, q2, dirinv, 1, 0, mesh_->facets.nb(), t, f
 	);
 	return (f != index_t(-1));
     }
@@ -723,7 +743,7 @@ namespace GEO {
 	    return;
 	}
         if(b + 1 == e) {
-	    segment_mesh_facet_nearest_intersection(q1, q2, mesh_, b, t, f);
+	    segment_mesh_facet_nearest_intersection(q1, q2, *mesh_, b, t, f);
 	    return;
 	}
         index_t m = b + (e - b) / 2;
@@ -736,28 +756,36 @@ namespace GEO {
     
 /****************************************************************************/
 
-    MeshCellsAABB::MeshCellsAABB(Mesh& M, bool reorder) : mesh_(M) {
+    MeshCellsAABB::MeshCellsAABB() : mesh_(nullptr) {
+    }
+    
+    MeshCellsAABB::MeshCellsAABB(Mesh& M, bool reorder) {
+	initialize(M, reorder);
+    }
+    
+    void MeshCellsAABB::initialize(Mesh& M, bool reorder) {
+	mesh_ = &M;
         if(reorder) {
-            mesh_reorder(mesh_, MESH_ORDER_MORTON);
+            mesh_reorder(*mesh_, MESH_ORDER_MORTON);
         }
         bboxes_.resize(
             max_node_index(
-                1, 0, mesh_.cells.nb()
+                1, 0, mesh_->cells.nb()
             ) + 1 // <-- this is because size == max_index + 1 !!!
         );
-        if(mesh_.cells.are_simplices()) {
+        if(mesh_->cells.are_simplices()) {
             init_bboxes_recursive(
-                mesh_, bboxes_, 1, 0, mesh_.cells.nb(), get_tet_bbox
+                *mesh_, bboxes_, 1, 0, mesh_->cells.nb(), get_tet_bbox
             );
         } else {
             init_bboxes_recursive(
-                mesh_, bboxes_, 1, 0, mesh_.cells.nb(), get_cell_bbox
+                *mesh_, bboxes_, 1, 0, mesh_->cells.nb(), get_cell_bbox
             );
         }
     }
 
     index_t MeshCellsAABB::containing_tet_recursive(
-        const vec3& p, bool exact,
+        const vec3& p, 
         index_t n, index_t b, index_t e        
     ) const {
 
@@ -766,7 +794,7 @@ namespace GEO {
         }
         
         if(e==b+1) {
-            if(mesh_tet_contains_point(mesh_, b, p, exact)) {
+            if(mesh_tet_contains_point(*mesh_, b, p)) {
                 return b;
             } else {
                 return NO_TET;
@@ -778,10 +806,10 @@ namespace GEO {
         index_t childr = 2 * n + 1;
 
         index_t result = containing_tet_recursive(
-            p, exact, childl, b, m
+            p, childl, b, m
         );
         if(result == NO_TET) {
-            result = containing_tet_recursive(p, exact, childr, m, e);
+            result = containing_tet_recursive(p, childr, m, e);
         }
         return result;
     }

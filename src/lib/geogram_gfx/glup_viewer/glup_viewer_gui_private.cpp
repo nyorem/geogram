@@ -29,7 +29,6 @@
 #include <geogram_gfx/full_screen_effects/unsharp_masking.h>
 #include <geogram_gfx/third_party/ImGui/imgui.h>
 #include <geogram_gfx/third_party/ImGui/imgui_impl_glfw.h>
-#include <geogram_gfx/third_party/ImGui/imgui_impl_opengl2.h>
 #include <geogram_gfx/third_party/ImGui/imgui_impl_opengl3.h>
 #include <geogram_gfx/third_party/quicktext/glQuickText.h>
 #include <geogram_gfx/third_party/imgui_fonts/roboto_medium.h>
@@ -60,9 +59,6 @@
 #include <string.h>
 #include <iostream>
 
-#ifdef GEO_GL_LEGACY
-static bool vanillaGL = false;
-#endif
 
 /***************************************************************************/
 
@@ -82,6 +78,8 @@ extern "C" {
     void glup_viewer_one_frame(void);
 }
 
+
+
 void glup_viewer_gui_update() {
     // It's a pity, but under Emscripten, only the browser can have the
     // control of the rendering loop, therefore it is not possible (or I
@@ -96,19 +94,42 @@ void glup_viewer_gui_update() {
 
 /***************************************************************************/
 
+#ifdef GEO_OS_EMSCRIPTEN
+extern "C" {
+    void drag_drop(GLFWwindow* w, int nb, const char** p);
+}
+
+void load_latest_file();
+
+/**
+ * \brief This function is called by the HTML shell each
+ *  time a file is loaded.
+ * \details For now, it uses the fact that the latest loaded
+ *  file appears first in the list (to be improved).
+ */
+void load_latest_file() {
+    std::vector<std::string> all_files;
+    GEO::FileSystem::get_directory_entries("/",all_files);
+    if(
+	all_files.size() > 0 && 
+	GEO::FileSystem::is_file(all_files[0])
+    ) {
+	const char* pname = all_files[0].c_str();
+	drag_drop(nullptr, 1, &pname);
+    }
+}
+#endif
+
+
 void glup_viewer_gui_init(GLFWwindow* w) {
 
+#ifdef GEO_OS_EMSCRIPTEN    
+    GEO::FileSystem::set_file_system_changed_callback(load_latest_file);
+#endif
+    
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); 
     ImGui_ImplGlfw_InitForOpenGL(w,false);
-#ifdef GEO_GL_LEGACY        
-    vanillaGL = (strcmp(glupCurrentProfileName(), "VanillaGL") == 0);
-    if(vanillaGL) {
-        GEO::Logger::out("ImGUI") << "Viewer GUI init (Vanilla)"
-                                  << std::endl;        
-        ImGui_ImplOpenGL2_Init();        
-    } else
-#endif
     {
         GEO::Logger::out("ImGUI") << "Viewer GUI init (GL3)"
                                   << std::endl;
@@ -147,14 +168,7 @@ void glup_viewer_gui_init(GLFWwindow* w) {
 }
 
 void glup_viewer_gui_cleanup() {
-#ifdef GEO_GL_LEGACY        
-    if(vanillaGL) {    
-        ImGui_ImplOpenGL2_Shutdown();
-    } else
-#endif
-    {
-        ImGui_ImplOpenGL3_Shutdown();        
-    }
+    ImGui_ImplOpenGL3_Shutdown();        
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
 }
@@ -162,14 +176,7 @@ void glup_viewer_gui_cleanup() {
 
 void glup_viewer_gui_begin_frame() {
     glup_viewer_gui_locked = true;
-#ifdef GEO_GL_LEGACY            
-    if(vanillaGL) {
-        ImGui_ImplOpenGL2_NewFrame();        
-    } else
-#endif        
-    {
-        ImGui_ImplOpenGL3_NewFrame();
-    }
+    ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 }
@@ -179,14 +186,7 @@ void glup_viewer_gui_end_frame() {
     if(overlay_func != nullptr) {
         overlay_func();
         ImGui::Render();
-#ifdef GEO_GL_LEGACY            	
-	if(vanillaGL) {
-	    ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
-	} else
-#endif	    
-	{
-	    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-	}
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     }
     glup_viewer_gui_locked = false;
     // We flush the queued command here, once ImGui::Render() was
@@ -287,29 +287,3 @@ void glup_viewer_effect_end_frame() {
     }
 }
 
-#ifdef GEO_OS_EMSCRIPTEN
-
-extern "C" {
-    
-    void drag_drop(GLFWwindow* w, int nb, const char** p);
-    void file_system_changed_callback();
-
-    /**
-     * \brief This function is called by the HTML shell each
-     *  time a file is loaded.
-     * \details For now, it uses the fact that the latest loaded
-     *  file appears first in the list (to be improved).
-     */
-    EMSCRIPTEN_KEEPALIVE void file_system_changed_callback() {
-        std::vector<std::string> all_files;
-        GEO::FileSystem::get_directory_entries("/",all_files);
-        if(
-            all_files.size() > 0 && 
-            GEO::FileSystem::is_file(all_files[0])
-        ) {
-            const char* pname = all_files[0].c_str();
-            drag_drop(nullptr, 1, &pname);
-        }
-    }
-}
-#endif

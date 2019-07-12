@@ -74,6 +74,8 @@
 #include <geogram/numerics/predicates/det3d.h>
 #include <geogram/numerics/predicates/det4d.h>
 #include <geogram/numerics/predicates/dot3d.h>
+#include <geogram/numerics/predicates/dot_compare_3d.h>
+#include <geogram/numerics/predicates/det_compare_4d.h>
 #include <geogram/numerics/predicates/aligned3d.h>
 
 #ifdef __SSE2__ 
@@ -1812,6 +1814,31 @@ namespace {
 
 	return Delta.sign();
     }
+
+    /**
+     * \brief Compares two dot products using exact arithmetics.
+     * \param[in] v0 , v1 , v2 three vectors
+     * \return the sign of v0.v1 - v0.v2
+     */
+    Sign dot_compare_3d_exact(
+	const double* v0, const double* v1, const double* v2
+    ) {
+	const expansion& d01_0 = expansion_product(v0[0], v1[0]);
+	const expansion& d01_1 = expansion_product(v0[1], v1[1]);
+	const expansion& d01_2 = expansion_product(v0[2], v1[2]);
+	const expansion& d01_12 = expansion_sum(d01_1, d01_2);
+	const expansion& d01 = expansion_sum(d01_0, d01_12);
+	
+	const expansion& d02_0 = expansion_product(v0[0], v2[0]);
+	const expansion& d02_1 = expansion_product(v0[1], v2[1]);
+	const expansion& d02_2 = expansion_product(v0[2], v2[2]);
+	const expansion& d02_12 = expansion_sum(d02_1, d02_2);
+	const expansion& d02 = expansion_sum(d02_0, d02_12);
+
+	const expansion& result = expansion_diff(d01, d02);
+	
+	return result.sign();
+    }
     
     // ================================ statistics ========================
 
@@ -2305,6 +2332,46 @@ namespace GEO {
 	    return result;
 	}
 
+
+	Sign det_compare_4d(
+	    const double* p0, const double* p1,
+	    const double* p2, const double* p3,
+	    const double* p4
+	) {
+	    Sign result = Sign(
+		det_compare_4d_filter(p0, p1, p2, p3, p4)
+	    );
+	    if(result == 0) {
+		const expansion& p0_0 = expansion_create(p0[0]);
+		const expansion& p0_1 = expansion_create(p0[1]);
+		const expansion& p0_2 = expansion_create(p0[2]);
+		const expansion& p0_3 = expansion_create(p0[3]);		
+		
+		const expansion& p1_0 = expansion_create(p1[0]);
+		const expansion& p1_1 = expansion_create(p1[1]);
+		const expansion& p1_2 = expansion_create(p1[2]);
+		const expansion& p1_3 = expansion_create(p1[3]);		
+		
+		const expansion& p2_0 = expansion_create(p2[0]);
+		const expansion& p2_1 = expansion_create(p2[1]);
+		const expansion& p2_2 = expansion_create(p2[2]);
+		const expansion& p2_3 = expansion_create(p2[3]);
+
+		const expansion& a3_0 = expansion_diff(p4[0],p3[0]);
+		const expansion& a3_1 = expansion_diff(p4[1],p3[1]);
+		const expansion& a3_2 = expansion_diff(p4[2],p3[2]);
+		const expansion& a3_3 = expansion_diff(p4[3],p3[3]);			
+
+		result = sign_of_expansion_determinant(
+		    p0_0, p0_1, p0_2, p0_3,
+		    p1_0, p1_1, p1_2, p1_3,
+		    p2_0, p2_1, p2_2, p2_3,
+		    a3_0, a3_1, a3_2, a3_3		    
+		);
+	    }
+	    return result;
+	}
+	
 	
 	bool aligned_3d(
 	    const double* p0, const double* p1, const double* p2
@@ -2323,15 +2390,24 @@ namespace GEO {
 	Sign dot_3d(
 	    const double* p0, const double* p1, const double* p2
 	) {
-	    Sign result = Sign(
-		det_3d_filter(p0, p1, p2)
-	    );
+	    Sign result = Sign(det_3d_filter(p0, p1, p2));
 	    if(result == 0) {
 		result = dot_3d_exact(p0, p1, p2);
 	    }
 	    return result;
 	}
 
+	Sign dot_compare_3d(
+	    const double* v0, const double* v1, const double* v2
+	) {
+	    Sign result = Sign(dot_compare_3d_filter(v0, v1, v2));
+	    if(result == 0) {
+		result = dot_compare_3d_exact(v0, v1, v2);
+	    }
+	    return result;
+	}
+
+	
 	bool points_are_identical_2d(
 	    const double* p1,
 	    const double* p2

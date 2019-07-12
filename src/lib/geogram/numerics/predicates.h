@@ -68,7 +68,7 @@ namespace GEO {
 	/**
 	 * \brief Mode for symbolic perturbations.
 	 */
-	enum SOSMode {SOS_ADDRESS, SOS_LEXICO };
+	enum SOSMode { SOS_ADDRESS, SOS_LEXICO };
 
 	/**
 	 * \brief Sets the current mode for handling symbolic perturbations 
@@ -555,7 +555,7 @@ namespace GEO {
 	);
 
 	/**
-	 * \brief Computes the sign of the determinant of a 3x3 
+	 * \brief Computes the sign of the determinant of a 4x4 
 	 *  matrix formed by four 4d points.
 	 * \param[in] p0 , p1 , p2 , p3 the four points
 	 * \return the sign of the determinant of the matrix.
@@ -563,6 +563,20 @@ namespace GEO {
 	Sign GEOGRAM_API det_4d(
 	    const double* p0, const double* p1,
 	    const double* p2, const double* p3
+	);
+
+	/**
+	 * \brief Computes the sign of the determinant of a 
+	 *   4x4 matrix formed by three 4d points and the
+	 *   difference of two 4d points.
+	 * \param[in] p0 , p1 , p2 , p3 , p4 the four points
+	 * \return the sign of the determinant of the matrix
+	 *   p0 p1 p2 p4-p3
+	 */
+	Sign GEOGRAM_API det_compare_4d(
+	    const double* p0, const double* p1,
+	    const double* p2, const double* p3,
+	    const double* p4
 	);
 	
 	/**
@@ -588,6 +602,15 @@ namespace GEO {
 	    const double* p0, const double* p1, const double* p2
 	);
 
+	/**
+	 * \brief Compares two dot products.
+	 * \param[in] v0 , v1 , v2 three vectors.
+	 * \return the sign of v0.v1 - v0.v2
+	 */
+	Sign GEOGRAM_API dot_compare_3d(
+	    const double* v0, const double* v1, const double* v2
+	);
+	
 	/**
 	 * \brief Tests whether two 2d points are identical.
 	 * \param[in] p1 first point
