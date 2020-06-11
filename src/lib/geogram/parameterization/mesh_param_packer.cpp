@@ -62,13 +62,16 @@ namespace {
      * \brief Tests whether texture coordinates are continuous across
      *  an edge.
      * \param[in] M a const reference to the mesh
-     * \param[in] tex_coord the facet corner attribute with the texture coordinates
+     * \param[in] tex_coord the facet corner attribute with the texture 
+     *  coordinates
      * \param[in] f1 the facet
      * \param[in] le1 the local index of the edge in the facet
      * \retval true if texture coordinates are continous across the edge
      * \retval false otherwise
      */
-    bool edge_is_continuous(const Mesh& M, Attribute<double>& tex_coord, index_t f1, index_t le1) {
+    bool edge_is_continuous(
+	const Mesh& M, Attribute<double>& tex_coord, index_t f1, index_t le1
+    ) {
 	index_t c11 = M.facets.corners_begin(f1) + le1;
 	index_t c12 = M.facets.next_corner_around_facet(f1,c11);
 
@@ -138,14 +141,13 @@ namespace {
 	    );
 
 	    
-	    FOR(v, M.vertices.nb()) {
+	    for(index_t v: M.vertices) {
 		xatlas_vertex_index[v] = index_t(-1);
 	    }
 	    index_t cur_xatlas_vertex = 0;
-	    FOR(f, M.facets.nb()) {
+	    for(index_t f: M.facets) {
 		if(chart[f] == chart_id) {
-		    for(index_t c = M.facets.corners_begin(f);
-			c < M.facets.corners_end(f); ++c) {
+		    for(index_t c: M.facets.corners(f)) {
 			index_t v = M.facet_corners.vertex(c);
 			if(xatlas_vertex_index[v] == index_t(-1)) {
 			    xatlas_vertex_index[v] = cur_xatlas_vertex;
@@ -161,7 +163,7 @@ namespace {
 		    }
 		}
 	    }
-	    FOR(f, M.facets.nb()) {
+	    for(index_t f: M.facets) {
 		if(chart[f] != chart_id) {
 		    continue;
 		}
@@ -180,30 +182,40 @@ namespace {
 		}
 	    }
 
-	    FOR(f, M.facets.nb()) {
+	    for(index_t f: M.facets) {
 		if(chart[f] != chart_id) {
 		    continue;
 		}
-		for(index_t c = M.facets.corners_begin(f);
-		    c < M.facets.corners_end(f); ++c
-		) {
+		for(index_t c: M.facets.corners(f)) {
 		    index_t v = M.facet_corners.vertex(c);
-		    facet_corner_xatlas_vertex_index[c] = xatlas_vertex_index[v];
+		    facet_corner_xatlas_vertex_index[c] =
+			xatlas_vertex_index[v];
 		}
 	    }
 	    
-	    mesh_decl_.vertexCount = cur_xatlas_vertex;
+	    mesh_decl_.vertexCount = uint32_t(cur_xatlas_vertex);
 	    mesh_decl_.vertexPositionData = xyz_.data();
 	    mesh_decl_.vertexPositionStride = sizeof(float)*3;
 	    mesh_decl_.vertexUvData = uv_.data();
 	    mesh_decl_.vertexUvStride = sizeof(float)*2;
-	    mesh_decl_.indexCount = triangles_.size();
+	    mesh_decl_.indexCount = uint32_t(triangles_.size());
 	    mesh_decl_.indexData = triangles_.data();
 	    mesh_decl_.indexOffset = 0;
 	    mesh_decl_.indexFormat = xatlas::IndexFormat::UInt32;
+
+	    uv_mesh_decl_.vertexCount = uint32_t(cur_xatlas_vertex);
+	    uv_mesh_decl_.vertexStride = sizeof(float)*2;
+	    uv_mesh_decl_.vertexUvData = uv_.data();
+	    uv_mesh_decl_.indexCount = uint32_t(triangles_.size());
+	    uv_mesh_decl_.indexData = triangles_.data();
+	    uv_mesh_decl_.indexOffset = 0;
+	    uv_mesh_decl_.indexFormat = xatlas::IndexFormat::UInt32;
+	    uv_mesh_decl_.faceMaterialData = nullptr;
+	    uv_mesh_decl_.rotateCharts = false;
 	}
 
 	xatlas::MeshDecl mesh_decl_;
+	xatlas::UvMeshDecl uv_mesh_decl_;	
 	vector<float> xyz_;
 	vector<float> uv_;
 	vector<index_t> triangles_;
@@ -212,9 +224,10 @@ namespace {
 
     /**
      * \brief Allocator function for geogram
-     * \details If we call realloc() with size == 0 to free memory (as xatlas does), then
-     *  valgrind thinks that there is a memory leak, so I re-interpret the initial
-     *  intent of the caller here, to make the memory debugger happy.
+     * \details If we call realloc() with size == 0 to free memory 
+     *  (as xatlas does), then valgrind thinks that there is a memory leak, 
+     *  so I re-interpret the initial intent of the caller here, 
+     *  to make the memory debugger happy.
      */
     void* my_realloc(void* ptr, size_t size) {
 	if(size == 0) {
@@ -244,12 +257,12 @@ namespace {
 	
 	index_t cur_chart=0;
 	{
-	    FOR(f, mesh.facets.nb()) {
+	    for(index_t f: mesh.facets) {
 		chart[f] = index_t(-1);
 	    }
 	    std::stack<index_t> S;
 	    
-	    FOR(f, mesh.facets.nb()) {
+	    for(index_t f: mesh.facets) {
 		if(chart[f] != index_t(-1)) {
 		    continue;
 		}
@@ -313,8 +326,8 @@ namespace GEO {
 	    
 	    atlas = xatlas::Create();
 	    for(index_t c=0; c<nb_charts; ++c) {
-		xatlas::AddMeshError::Enum error = xatlas::AddMesh(
-		    atlas, charts[c].mesh_decl_
+		xatlas::AddMeshError::Enum error = xatlas::AddUvMesh(
+		    atlas, charts[c].uv_mesh_decl_
 		);
 		if (error != xatlas::AddMeshError::Success) {
 		    Logger::err("Packer")
@@ -331,27 +344,51 @@ namespace GEO {
 
 	// Step 3: pack
 	{
-	    xatlas::SetRealloc(my_realloc);
+	    xatlas::SetAlloc(my_realloc);
 	    xatlas::PackOptions packerOptions;
-	    packerOptions.conservative = false; // true;
 	    packerOptions.padding = 1;
 	    xatlas::PackCharts(atlas, packerOptions);
 
-	    // Scale texture coordinates to [0,1]
+	    double u_min = Numeric::max_float64();
+	    double v_min = Numeric::max_float64();
+	    double u_max = Numeric::min_float64();
+	    double v_max = Numeric::min_float64();
+
+	    // Get uv bbox
 	    {
 		Attribute<index_t> facet_corner_xatlas_vertex_index(
 		    mesh.facet_corners.attributes(), "xatlas_index"		
 		);
-		FOR(f, mesh.facets.nb()) {
+		for(index_t f: mesh.facets) {
 		    index_t chart_id = chart[f];
-		    for(index_t c = mesh.facets.corners_begin(f);
-			c < mesh.facets.corners_end(f); ++c
-		    ) {
+		    for(index_t c: mesh.facets.corners(f)) {
 			index_t v = facet_corner_xatlas_vertex_index[c];
 			const xatlas::Vertex& vertex =
 			    atlas->meshes[chart_id].vertexArray[v];
-			tex_coord[2*c]   = (vertex.uv[0] / atlas->width);
-			tex_coord[2*c+1] = (vertex.uv[1] / atlas->width);
+			double U = double(vertex.uv[0]);
+			double V = double(vertex.uv[1]);
+			u_min = std::min(u_min,U);
+			v_min = std::min(v_min,V);
+			u_max = std::max(u_max,U);
+			v_max = std::max(v_max,V);			
+		    }
+		}
+	    }
+
+	    // Scale texture coordinates to [0,1]
+	    {
+		double scale = 1.0 / std::max(u_max-u_min,v_max-v_min);
+		Attribute<index_t> facet_corner_xatlas_vertex_index(
+		    mesh.facet_corners.attributes(), "xatlas_index"		
+		);
+		for(index_t f: mesh.facets) {
+		    index_t chart_id = chart[f];
+		    for(index_t c: mesh.facets.corners(f)) {
+			index_t v = facet_corner_xatlas_vertex_index[c];
+			const xatlas::Vertex& vertex =
+			    atlas->meshes[chart_id].vertexArray[v];
+			tex_coord[2*c]   = scale * (double(vertex.uv[0]) - u_min);
+			tex_coord[2*c+1] = scale * (double(vertex.uv[1]) - v_min);
 		    }
 		}
 		facet_corner_xatlas_vertex_index.destroy();
@@ -503,16 +540,15 @@ namespace GEO {
 	    for(index_t ff=0; ff<chart_->facets.size(); ++ff) {
 		index_t f = chart_->facets[ff];
 		for(
-		    index_t c1 = chart_->mesh.facets.corners_begin(f);
-		    c1 < chart_->mesh.facets.corners_end(f); ++c1
-		) {
+		    index_t c1: chart_->mesh.facets.corners(f)) {
 		    index_t neighf = chart_->mesh.facet_corners.adjacent_facet(c1);
 		    
 		    if(neighf != NO_FACET && chart_attr[neighf] == chart_->id) {
 			continue;
 		    }
 		    
-		    index_t c2 = chart_->mesh.facets.next_corner_around_facet(f,c1);
+		    index_t c2 =
+			chart_->mesh.facets.next_corner_around_facet(f,c1);
 		    vec2 p1(tex_coord[2*c1], tex_coord[2*c1+1]);
 		    vec2 p2(tex_coord[2*c2], tex_coord[2*c2+1]);
 
@@ -524,8 +560,8 @@ namespace GEO {
 			std::swap(p1,p2);
 		    }
 
-		    p1.x -= margin_width_in_pixels * step;
-		    p2.x += margin_width_in_pixels * step;
+		    p1.x -= double(margin_width_in_pixels) * step;
+		    p2.x += double(margin_width_in_pixels) * step;
 		    
 		    double a = (p2.y - p1.y) / (p2.x - p1.x);
 		    for(double x = p1.x; x<p2.x; x+=step) {
@@ -574,10 +610,7 @@ namespace GEO {
             max_=max_+v; 
 	    for(index_t ff=0; ff<chart_->facets.size(); ++ff) {
 		index_t f = chart_->facets[ff];
-		for(
-		    index_t c = chart_->mesh.facets.corners_begin(f);
-		    c < chart_->mesh.facets.corners_end(f); ++c
-		) {
+		for(index_t c: chart_->mesh.facets.corners(f)) {
 		    tex_coord[2*c] += v.x;
 		    tex_coord[2*c+1] += v.y;
 		}
@@ -786,8 +819,8 @@ namespace GEO {
                 area += data_[numrect].area();
             }
             double margin = 
-                (::sqrt(area) / image_size_in_pixels_) * 
-                margin_width_in_pixels_;
+                (::sqrt(area) / double(image_size_in_pixels_)) * 
+                double(margin_width_in_pixels_);
             add_margin(margin); 
 
             // find a first solution
@@ -985,10 +1018,7 @@ namespace GEO {
     static bool chart_is_ok(Chart& chart, Attribute<double>& tex_coord) {
 	for(index_t ff=0; ff<chart.facets.size(); ++ff) {
 	    index_t f = chart.facets[ff];
-	    for(
-		index_t c = chart.mesh.facets.corners_begin(f);
-		c < chart.mesh.facets.corners_end(f); ++c
-	    ) {
+	    for(index_t c: chart.mesh.facets.corners(f)) {
 		if(Numeric::is_nan(tex_coord[2*c])) {
 		    return false;
 		} 
@@ -1020,7 +1050,7 @@ namespace GEO {
 	// Get the charts
 	vector<Chart> charts;
 	index_t nb_charts=0;
-	for(index_t f=0; f<mesh.facets.nb(); ++f) {
+	for(index_t f: mesh.facets) {
 	    nb_charts = std::max(nb_charts, chart_attr_[f]);
 	}
 	++nb_charts;
@@ -1029,7 +1059,7 @@ namespace GEO {
 	    charts.push_back(Chart(mesh, i));
 	}
 	
-	for(index_t f=0; f<mesh.facets.nb(); ++f) {
+	for(index_t f: mesh.facets) {
 	    charts[chart_attr_[f]].facets.push_back(f);
 	}
 
@@ -1040,10 +1070,7 @@ namespace GEO {
             if(!chart_is_ok(charts[i], tex_coord_)) {
 		for(index_t ff=0; ff<charts[i].facets.size(); ++ff) {
 		    index_t f = charts[i].facets[ff];
-		    for(
-			index_t c = mesh.facets.corners_begin(f);
-			c<mesh.facets.corners_end(f); ++c
-		    ) {
+		    for(index_t c: mesh.facets.corners(f)) {
 			tex_coord_[2*c] = 0.0;
 			tex_coord_[2*c+1] = 0.0;
 		    }
@@ -1061,7 +1088,7 @@ namespace GEO {
 	    );
 	    double l = std::max(u_max - u_min, v_max - v_min);
 	    if(l > 1e-6) {
-		for(index_t c=0; c<mesh.facet_corners.nb(); ++c) {
+		for(index_t c: mesh.facet_corners) {
 		    tex_coord_[2*c]   = (tex_coord_[2*c] - u_min) / l;
 		    tex_coord_[2*c+1] = (tex_coord_[2*c+1] - v_min) / l;		    
 		}
@@ -1147,8 +1174,7 @@ namespace GEO {
 	dir.begin();
 	for(index_t ff=0; ff<chart.facets.size(); ++ff) {
 	    index_t f = chart.facets[ff];
-	    for(index_t c1=chart.mesh.facets.corners_begin(f);
-		c1 < chart.mesh.facets.corners_end(f); ++c1) {
+	    for(index_t c1: chart.mesh.facets.corners(f)) {
 		index_t adj_f = chart.mesh.facet_corners.adjacent_facet(c1);
 		if(adj_f == NO_FACET || chart_attr_[adj_f] != chart.id) {
 		    index_t c2 = chart.mesh.facets.next_corner_around_facet(f,c1);
@@ -1168,8 +1194,7 @@ namespace GEO {
 	
 	for(index_t ff=0; ff<chart.facets.size(); ++ff) {
 	    index_t f = chart.facets[ff];
-	    for(index_t c=chart.mesh.facets.corners_begin(f);
-		c < chart.mesh.facets.corners_end(f); ++c) {
+	    for(index_t c: chart.mesh.facets.corners(f)) {
 		vec2 uv(tex_coord_[2*c], tex_coord_[2*c+1]);
 		tex_coord_[2*c] = dot(uv,U);
 		tex_coord_[2*c+1] = dot(uv,V);
@@ -1191,8 +1216,7 @@ namespace GEO {
 
 	for(index_t ff=0; ff<chart.facets.size(); ++ff) {
 	    index_t f = chart.facets[ff];
-	    for(index_t c=chart.mesh.facets.corners_begin(f);
-		c < chart.mesh.facets.corners_end(f); ++c) {
+	    for(index_t c: chart.mesh.facets.corners(f)) {
 		tex_coord_[2*c] *= factor;
 		tex_coord_[2*c+1] *= factor;
 	    }

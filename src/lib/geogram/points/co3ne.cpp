@@ -1347,7 +1347,7 @@ namespace {
              *  starting from this vertex
              * \param[in] x the index of the adjacent Voronoi seed
              */
-            void set_adjacent_seed(int x) {
+            void set_adjacent_seed(signed_index_t x) {
                 adjacent_seed_ = x;
             }
 
@@ -2659,10 +2659,10 @@ namespace GEO {
             }
         }
         Co3Ne co3ne(M);
-	Logger::out("Co3Ne") << "Computing normals" << std::endl;
+	Logger::out("Co3Ne") << "Computing normals" << std::endl; 
         co3ne.compute_normals(nb_neighbors);
 	if(reorient) {
-	    Logger::out("Co3Ne") << "Orienting normals" << std::endl;
+	    Logger::out("Co3Ne") << "Orienting normals" << std::endl; 
 	    if(!co3ne.reorient_normals()) {
 		return false;
 	    }

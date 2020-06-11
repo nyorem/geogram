@@ -55,6 +55,78 @@
 #include <vector>
 #include <cmath>
 #include <limits>
+#include <stack>
+
+
+namespace {
+    using namespace VBW;
+
+    /**
+     * \brief a class for a stack of ushorts allocated on the stack.
+     * \details Used by clip_by_plane_fast() internally. I do not want
+     *  clip_by_plane_fast() to do dynamic allocation.
+     */
+    class SmallStack_ushort {
+    public:
+
+	/**
+	 * \brief SmallStack constructor.
+	 * \param[in] buffer a buffer. Callers keeps ownership 
+	 *   (in most cases it will be created by alloca()).
+	 * \param[in] capacity the number of uints that can
+	 *  be stored in the buffer.
+	 */
+	SmallStack_ushort(
+	    ushort* buffer, int capacity
+	) : buffer_(buffer),
+	    index_(-1),
+	    capacity_(capacity) {
+	}
+
+	/**
+	 * \brief Tests whether this stack is empty.
+	 * \retval true if this stack is empty.
+	 * \retval false otherwise.
+	 */
+	bool empty() const {
+	    return (index_ == -1);
+	}
+
+	/**
+	 * \brief Pushes an item on the stack.
+	 * \param[in] val the item to be pushed.
+	 */
+	void push(ushort val) {
+	    ++index_;
+	    vbw_assert(index_ < capacity_);
+	    (void)capacity_; // To silence a warning.
+	    buffer_[index_] = val;
+	}
+
+	/**
+	 * \brief Pops an item from the stack.
+	 */
+	void pop() {
+	    vbw_assert(!empty());
+	    --index_;
+	}
+
+	/**
+	 * \brief Gets the item on the top of the stack.
+	 * \return the item.
+	 */
+	ushort top() const {
+	    vbw_assert(!empty());
+	    return buffer_[index_];
+	}
+    private:
+	ushort* buffer_;
+	int index_;
+	int capacity_;
+    };
+}
+
+/*************************************************************/
 
 namespace VBW {
     
@@ -186,10 +258,10 @@ namespace VBW {
 
     void ConvexCell::init_with_tet(
 	vec4 P0, vec4 P1, vec4 P2, vec4 P3,
-	index_t P0_global_index,
-	index_t P1_global_index,
-	index_t P2_global_index,
-	index_t P3_global_index	    
+	global_index_t P0_global_index,
+	global_index_t P1_global_index,
+	global_index_t P2_global_index,
+	global_index_t P3_global_index	    
     ) {
 	geo_debug_assert(has_vglobal_);
 	init_with_tet(P0, P1, P2, P3);
@@ -215,7 +287,8 @@ namespace VBW {
     
     
     index_t ConvexCell::save(
-	std::ostream& out, index_t v_offset, double shrink, bool borders_only
+	std::ostream& out, global_index_t v_offset,
+	double shrink, bool borders_only
     ) const {
 
 	vec3 g = make_vec3(0.0, 0.0, 0.0);
@@ -265,7 +338,8 @@ namespace VBW {
 	    if(borders_only &&
 	       has_vglobal() &&
 	       v_global_index(v) != global_index_t(-1) &&
-	       v_global_index(v) != global_index_t(-2) // This one for fluid free bndry
+	       v_global_index(v) != global_index_t(-2)
+                // inde_t(-2) is for fluid free bndry
 	    ) {
 		continue;
 	    }
@@ -284,6 +358,21 @@ namespace VBW {
 	return nt;
     }
 
+    void ConvexCell::for_each_Voronoi_vertex(
+	index_t v,
+	std::function<void(index_t)> vertex
+    ) {
+	geo_debug_assert(!geometry_dirty_);
+	if(v2t_[v] != END_OF_LIST) {
+	    index_t t = index_t(v2t_[v]);
+	    do {
+		vertex(t);
+		index_t lv = triangle_find_vertex(t,v);		   
+		t = triangle_adjacent(t, (lv + 1)%3);
+	    } while(t != v2t_[v]);
+	}
+    }
+    
 #if !defined(STANDALONE_CONVEX_CELL) && !defined(GEOGRAM_PSM)
     
     void ConvexCell::append_to_mesh(
@@ -291,7 +380,7 @@ namespace VBW {
 	GEO::Attribute<GEO::index_t>* facet_attr
     ) const {
 
-	index_t v_offset = mesh->vertices.nb();
+	global_index_t v_offset = mesh->vertices.nb();
 	
 	vec3 g = make_vec3(0.0, 0.0, 0.0);
 	if(shrink != 0.0) {
@@ -331,11 +420,12 @@ namespace VBW {
 	    if(borders_only &&
 	       has_vglobal() &&
 	       v_global_index(v) != global_index_t(-1) &&
-	       v_global_index(v) != global_index_t(-2) // This one for fluid free bndry
+	       v_global_index(v) != global_index_t(-2) // This one for
+	                                               // fluid free bndry
 	    ) {
 		continue;
 	    }
-	    std::vector<index_t> facet_vertices;
+	    std::vector<global_index_t> facet_vertices;
 	    if(v2t[v] != index_t(-1)) {
 		index_t t = v2t[v];
 		do {
@@ -347,7 +437,9 @@ namespace VBW {
 	    if(facet_vertices.size() < 3) {
 		continue;
 	    }
-	    index_t f = mesh->facets.create_polygon(GEO::index_t(facet_vertices.size()));
+	    global_index_t f = mesh->facets.create_polygon(
+		GEO::index_t(facet_vertices.size())
+	    );
 	    for(index_t i=0; i<facet_vertices.size(); ++i) {
 		mesh->facets.set_vertex(f, i, facet_vertices[i]);
 	    }
@@ -371,7 +463,8 @@ namespace VBW {
 	}
 	return false;
     }
-    
+
+
     void ConvexCell::clip_by_plane(vec4 eqn, global_index_t j) {
 	vbw_assert(has_vglobal_);
 	clip_by_plane(eqn);
@@ -403,6 +496,9 @@ namespace VBW {
 	//   - the code is simpler.
 	//   - and more importantly, we got no more than a few tenths of
 	//     vertices.
+	// The 'climbing from a random triangle' strategy is implemented
+	// in clip_by_plane_fast(). We keep both implementations for now,
+	// until we make sure than one is more efficient than the other one.
 
         index_t t = first_valid_;
         first_valid_ = END_OF_LIST;
@@ -421,49 +517,296 @@ namespace VBW {
 		first_valid_ = t;
 	    }
 	    t = index_t(T.flags);
+	}
+	
+	triangulate_conflict_zone(lv, conflict_head, conflict_tail);
+    }
+
+    // This version of clip_by_plane(), with a user-defined predicate,
+    // is duplicated from the standard version above. May be fixed by
+    // moving it to the header file (to have faster invokation of the
+    // predicate) and make the default version call it with PCK, but
+    // I do not want to do that because:
+    //    - will make the header more heavy, longer compilation time
+    //    - not sure about the impact on performance
+    //    - the function is short, not a big drama to duplicate it...
+    void ConvexCell::clip_by_plane(
+	vec4 eqn, global_index_t global_index,
+	std::function<bool(ushort,ushort)> triangle_conflict_predicate
+    ) {
+	geometry_dirty_ = true;
+
+	index_t lv = nb_v_;	
+	if(lv == max_v()) {
+	    grow_v();
+	}
+	plane_eqn_[lv] = eqn;
+	vbw_assert(lv < max_v());
+	++nb_v_;
+
+	// Note: it is unlikely that this function is used without
+	// global indices (because without global indices, it would
+	// mean we are only using geometry, then we should use the
+	// default predicate), so we could probably make it mandatory
+	// to have global indices here.
+	if(has_vglobal_) {
+	    vglobal_[nb_v()-1] = global_index;
+	}
+
+	
+	// Step 1: Find conflict zone and link conflicted triangles
+	// (to recycle them in free list).
+
+	index_t conflict_head = END_OF_LIST;
+	index_t conflict_tail = END_OF_LIST;
+
+        // Classify triangles, compute conflict list and valid list.
+	// Note: This could be done by climbing from a random triangle,
+	// but here we prefer complete linear scan for several reasons:
+	//   - it is more robust to numerical errors (here we are not
+	//     using exact predicates).
+	//   - the code is simpler.
+	//   - and more importantly, we got no more than a few tenths of
+	//     vertices.
+	// The 'climbing from a random triangle' strategy is implemented
+	// in clip_by_plane_fast(). We keep both implementations for now,
+	// until we make sure than one is more efficient than the other one
+	// (and clip_by_plane_fast() does not have a version with the user-
+	// defined predicate for now).
+
+        index_t t = first_valid_;
+        first_valid_ = END_OF_LIST;
+        while(t != END_OF_LIST) { 
+	    TriangleWithFlags T = get_triangle_and_flags(t);
+	    if(triangle_conflict_predicate(ushort(t), ushort(nb_v()-1))) {
+		set_triangle_flags(
+		    t, ushort(conflict_head) | ushort(CONFLICT_MASK)
+		);
+		conflict_head = t;
+		if(conflict_tail == END_OF_LIST) {
+		    conflict_tail = t;
+		}
+	    } else {
+		set_triangle_flags(t, ushort(first_valid_));
+		first_valid_ = t;
+	    }
+	    t = index_t(T.flags);
+	}
+	
+	triangulate_conflict_zone(lv, conflict_head, conflict_tail);
+    }
+
+    
+    void ConvexCell::clip_by_plane_fast(vec4 P, global_index_t j) {
+	vbw_assert(has_vglobal_);
+	clip_by_plane_fast(P);
+	vglobal_[nb_v()-1] = j;
+    }
+    
+    void ConvexCell::clip_by_plane_fast(vec4 P) {
+	geometry_dirty_ = true;
+	index_t lv = nb_v_;	
+	if(lv == max_v()) {
+	    grow_v();
+	}
+	plane_eqn_[lv] = P;
+	vbw_assert(lv < max_v());
+	++nb_v_;
+
+	// Step 1: Find a good seed triangle (likely to
+	// be in conflict). If it is not in conflict,
+	// it is not a big problem (it will be just a
+	// bit slower), so we use inexact predicates
+	// here.
+	
+	index_t t_init = END_OF_LIST;
+
+	{
+	    index_t t_pred = END_OF_LIST;	
+	    index_t t = first_valid_;
+	    if(t == END_OF_LIST) {
+		return;
+	    }
+
+	    auto triangle_distance = [this](index_t t_in, vec4 P_in) {
+		  Triangle T = get_triangle(t_in);
+		  vbw_assert(T.i != VERTEX_AT_INFINITY);
+		  vbw_assert(T.j != VERTEX_AT_INFINITY);
+		  vbw_assert(T.k != VERTEX_AT_INFINITY);		  
+		  vec4 p1 = vertex_plane(T.i);
+		  vec4 p2 = vertex_plane(T.j);
+		  vec4 p3 = vertex_plane(T.k);
+		  return det4x4(
+		      p1.x, p2.x, p3.x, P_in.x,
+		      p1.y, p2.y, p3.y, P_in.y,
+		      p1.z, p2.z, p3.z, P_in.z,
+		      p1.w, p2.w, p3.w, P_in.w
+		  );
+	    };
+	
+	    index_t count = 100;
+	    double  t_dist = triangle_distance(t,P);
+	    
+	  still_walking:
+	    for(index_t le=0; le<3; ++le) {
+		index_t t_next = triangle_adjacent(t, le);
+		if(t_next == t_pred) {
+		    continue;
+		}
+		double t_next_dist = triangle_distance(t_next,P);
+		if(t_next_dist < t_dist) {
+		    continue;
+		}
+		--count;
+		t_pred = t;
+		t = t_next;
+		t_dist = t_next_dist;
+		if(count > 0 && t_dist < 0.0) {
+		    goto still_walking;
+		}
+	    }
+	    t_init = t;
 	} 
 
+	// note: t_init is now one triangle, probably in conflict
+	// (but not always: there can be degenerate cases where count
+	//  reach zero). When t_init is in conflict, it is in general
+	//  not the "highest" triangle (as one expect in a Delaunay
+	//  triangulation code, but here it is different).
+
+	
+	// Step 2: mark all the triangles that have the same
+	// conflict status as t_init with CONFLICT_MASK
+	// (even if t_init was not in conflict, then we will
+	//  swap confict mask)
+	
+	bool t_init_is_in_conflict = triangle_is_in_conflict(
+	    get_triangle_and_flags(t_init), P
+	);
+
+	{
+	    ushort* buff = (ushort*)alloca(max_t_*sizeof(ushort));
+	    SmallStack_ushort S(buff, int(max_t_));
+	    S.push(ushort(t_init));
+	    set_triangle_flags(
+		t_init,
+		get_triangle_flags(t_init) |
+		     ushort(CONFLICT_MASK) |
+		     ushort(MARKED_MASK)
+	    );
+	    while(!S.empty()) {
+		index_t t = index_t(S.top());
+		S.pop();
+		for(index_t le=0; le<3; ++le) {
+		    index_t t_neigh = triangle_adjacent(t,le);
+		    if(
+			(get_triangle_flags(t_neigh) & ushort(MARKED_MASK))
+			== 0
+		    ) {
+			if( triangle_is_in_conflict(
+				get_triangle_and_flags(t_neigh), P
+			    ) == t_init_is_in_conflict
+			) {
+			    set_triangle_flags(
+				t_neigh,
+				get_triangle_flags(t_neigh) |
+				      ushort(CONFLICT_MASK) |
+				      ushort(MARKED_MASK)
+			    );
+			    S.push(ushort(t_neigh));
+			} else {
+			    set_triangle_flags(
+				t_neigh,
+				get_triangle_flags(t_neigh) |
+				        ushort(MARKED_MASK)
+			    );
+			}
+		    }
+		}
+	    }
+	}
+
+	// Step 3: update conflict list and active triangles list
+	index_t conflict_head = END_OF_LIST;
+	index_t conflict_tail = END_OF_LIST;
+	{
+	    index_t new_first_valid = END_OF_LIST;
+	    index_t t = first_valid_;
+	    while(t != END_OF_LIST) {
+		bool t_is_in_conflict = triangle_is_marked_as_conflict(t);
+		index_t t_next =
+		    index_t(
+			get_triangle_flags(t) &
+			~(CONFLICT_MASK | MARKED_MASK)
+		    );
+		// Flip conflict flag if t_init was not in conflict.
+		if(!t_init_is_in_conflict) {
+		    t_is_in_conflict = !t_is_in_conflict;
+		}
+		if(t_is_in_conflict) {
+		    set_triangle_flags(
+			t, ushort(conflict_head) | ushort(CONFLICT_MASK)
+		    );
+		    conflict_head = t;
+		    if(conflict_tail == END_OF_LIST) {
+			conflict_tail = t;
+		    }
+		} else {
+		    set_triangle_flags(t, ushort(new_first_valid));
+		    new_first_valid = t;
+		}
+		t = t_next;
+	    }
+	    first_valid_ = new_first_valid;
+	} 
+
+	triangulate_conflict_zone(lv, conflict_head, conflict_tail);
+    }
+    
+    /***********************************************************************/
+
+    void ConvexCell::triangulate_conflict_zone(
+	index_t lv, index_t conflict_head, index_t conflict_tail
+    ) {
 	// Special case: no triangle in conflict.
 	if(conflict_head == END_OF_LIST) {
 	    return;
 	}
 
-	// Step 2: Triangulate cavity
-
-        t = conflict_head;
+	// Triangulate conflict zone
+        index_t t = conflict_head;
         while(t != END_OF_LIST) { 
 	    TriangleWithFlags T = get_triangle_and_flags(t);
 	    
 	    index_t adj1 = vv2t(T.j,T.i);
 	    index_t adj2 = vv2t(T.k,T.j);
-	    index_t adj3 = vv2t(T.i,T.k);	       
+	    index_t adj3 = vv2t(T.i,T.k);
 	    
 	    ushort flg1 = get_triangle_flags(adj1);
 	    ushort flg2 = get_triangle_flags(adj2);
-	    ushort flg3 = get_triangle_flags(adj3);		
+	    ushort flg3 = get_triangle_flags(adj3);
 	    
 	    if(	!(flg1 & ushort(CONFLICT_MASK)) ) {
 		new_triangle(lv, T.i, T.j);
 	    }
-
+	    
 	    if(	!(flg2 & ushort(CONFLICT_MASK)) ) {
 		new_triangle(lv, T.j, T.k);		
 	    }
-
+	    
 	    if(	!(flg3 & ushort(CONFLICT_MASK)) ) {
 		new_triangle(lv, T.k, T.i);
 	    }
-	       
+	    
 	    t = index_t(T.flags & ~ushort(CONFLICT_MASK));
 	} 
 	
-	// Step 3: Recycle conflict list.
-	
+	// Recycle triangles in conflict zone
 	set_triangle_flags(conflict_tail, ushort(first_free_));
 	first_free_ = conflict_head;
-
     }
-
+    
+    
     /***********************************************************************/
 
     bool ConvexCell::triangle_is_in_conflict(
@@ -495,9 +838,9 @@ namespace VBW {
 	    //   The triangle is in conflict with eqn if the 
 	    // result of compute_triangle_point(t) injected in eqn 
 	    // has a negative sign.
-	    //   Examining the formula in compute_triangle_point(), this corresponds
-	    // to (minus) the 4x4 determinant of the 4 plane equations
-	    // developed w.r.t. the 4th column.
+	    //   Examining the formula in compute_triangle_point(),
+	    // this corresponds to (minus) the 4x4 determinant of the
+	    // 4 plane equations developed w.r.t. the 4th column.
 	    // (see Edelsbrunner - Simulation of Simplicity for similar examples
 	    //  of computations).
 	
@@ -505,7 +848,9 @@ namespace VBW {
 	    vec4 p2 = vertex_plane(T.j);
 	    vec4 p3 = vertex_plane(T.k);
 	    
-	    return(GEO::PCK::det_4d(p1.data(), p2.data(), p3.data(), eqn.data()) >= 0);
+	    return(GEO::PCK::det_4d(
+		       p1.data(), p2.data(), p3.data(), eqn.data()) >= 0
+	    );
 	}
 #endif
 	
@@ -546,9 +891,9 @@ namespace VBW {
 	    //   The triangle is in conflict with eqn if the 
 	    // result of compute_triangle_point(t) injected in eqn 
 	    // has a negative sign.
-	    //   Examining the formula in compute_triangle_point(), this corresponds
-	    // to (minus) the 4x4 determinant of the 4 plane equations
-	    // developed w.r.t. the 4th column.
+	    //   Examining the formula in compute_triangle_point(),
+	    // this corresponds to (minus) the 4x4 determinant of the 4 plane
+	    // equations developed w.r.t. the 4th column.
 	    // (see Edelsbrunner - Simulation of Simplicity for similar examples
 	    //  of computations).
 	
@@ -618,11 +963,12 @@ namespace VBW {
 	}
 	
         // Get the plane equations associated with each vertex of t
+
 	vec4 pi1 = vertex_plane(T.i);
 	vec4 pi2 = vertex_plane(T.j);
 	vec4 pi3 = vertex_plane(T.k);
 
-        // Find the intersection of the three planes using Kramer's formula.
+        // Find the intersection of the three planes using Cramer's formula.
 	// (see Edelsbrunner - Simulation of Simplicity for other examples).
 	// 
 	// Cramer's formula: each component of the solution is obtained as
@@ -955,5 +1301,8 @@ namespace VBW {
 	}
 	return result;
     }
+
+    /************************************************************************/
+
     
 }

@@ -103,7 +103,7 @@ namespace GEO {
          * \copydoc SimpleApplication::save()
          */
 	bool save(const std::string& filename) override;
-        
+
         /**
          * \brief Gets the instance.
          * \return a pointer to the current SimpleMeshApplication.
@@ -262,7 +262,8 @@ namespace GEO {
         bool show_vertices_selection_;
         float vertices_size_;
 	vec4f vertices_color_;
-
+	float vertices_transparency_;
+	
         bool show_surface_;
         bool show_surface_sides_;        
         bool show_mesh_;

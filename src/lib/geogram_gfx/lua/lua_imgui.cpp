@@ -478,12 +478,22 @@ namespace {
     }
 
     int wrapper_Text(lua_State* L) {
+	if(lua_gettop(L) < 1) {
+	    return luaL_error(
+		L, "'imgui.Text()' invalid number of arguments"
+	    );
+	}
 	const char* str = lua_tostring(L,1);
 	ImGui::Text("%s",str);
 	return 0;
     }
 
     int wrapper_SetTooltip(lua_State* L) {
+	if(lua_gettop(L) != 1) {
+	    return luaL_error(
+		L, "'imgui.SetTooltip()' invalid number of arguments"
+	    );
+	}
 	const char* str = lua_tostring(L,1);
 	ImGui::SetTooltip("%s",str);
 	return 0;
@@ -572,35 +582,404 @@ namespace {
 	return 1;
     }
 
+    int wrapper_SimpleButton(lua_State* L) {
+	if(lua_gettop(L) != 1) {
+	    return luaL_error(
+		L, "'imgui.SimpleButton()' invalid number of arguments"
+	    );
+	}
+	if(!lua_isstring(L,1)) {
+	    return luaL_error(
+		L, "'imgui.SimpleButton()' argument is not a string"
+	    );
+	}
+	const char* K = lua_tostring(L,1);
+	lua_pushboolean(L,ImGui::SimpleButton(K));
+	return 1;
+    }
+
+    int wrapper_GetMousePos(lua_State* L) {
+	if(lua_gettop(L) != 0) {
+	    return luaL_error(
+		L, "'imgui.GetMousePos()' invalid number of arguments"
+	    );
+	}
+	lua_pushnumber(L,double(ImGui::GetIO().MousePos.x));
+	lua_pushnumber(L,double(ImGui::GetIO().MousePos.y));	
+	return 2;
+    }
+    
 }
+
+namespace GEO {
+    
+    /**
+     * \brief Specialization of lua_push() for ImDrawList*
+     */
+    template<> inline void lua_push(
+	lua_State* L, ImDrawList* x
+    ) {
+	lua_pushlightuserdata(L,(void*)x);
+    }
+
+    /**
+     * \brief lua_to specialization for ImDrawList*
+     */
+    template<> class lua_to<ImDrawList*> {
+      public:
+	lua_to(lua_State* L, int idx) {
+	    x_ = (ImDrawList*)(lua_touserdata(L,idx));
+	}
+	static bool can_convert(lua_State* L, int idx) {
+	    return lua_check_type(L, idx, my_lua_islightuserdata);
+	}
+	operator ImDrawList*() const {
+	    return x_;
+	}
+      private:
+	ImDrawList* x_;
+    };
+    
+}
+
+// WIP: export all ImGuiDrawList functions to LUA
+
+namespace ImGuiDrawAdapters {
+
+    // Needed by lua_bindwrapper because ImGui::GetBackgroundDrawList()
+    // takes an ImViewport (default = nullptr) as an argunemt.
+    static ImDrawList* GetBackgroundDrawList() {
+	return ImGui::GetBackgroundDrawList();
+    }
+
+    // Needed by lua_bindwrapper because ImGui::GetForegroundDrawList()
+    // takes an ImViewport (default = nullptr) as an argunemt.
+    static ImDrawList* GetForegroundDrawList() {
+	return ImGui::GetForegroundDrawList();
+    }
+
+    static void PushClipRect(
+	ImDrawList* list,
+	float xmin, float ymin,
+	float xmax, float ymax,
+	bool intersect
+    ) {
+	list->PushClipRect(
+	    ImVec2(xmin, ymin),
+	    ImVec2(xmax, ymax),
+	    intersect
+	);
+    }
+
+    static void PushClipRectFullScreen(ImDrawList* list) {
+	list->PushClipRectFullScreen();
+    }
+
+    static void PopClipRect(ImDrawList* list) {
+	list->PopClipRect();
+    }
+
+    static void PushTextureID(ImDrawList* list, index_t id) {
+	union {
+	    ImTextureID im_texture_id;
+	    index_t gl_texture_id;
+	};
+	gl_texture_id = id;
+	list->PushTextureID(im_texture_id);
+    }
+    
+    static void PopTextureID(ImDrawList* list) {
+	list->PopClipRect();
+    }
+    
+    static void AddLine(
+	ImDrawList* list, float x1, float y1, float x2, float y2,
+	Numeric::uint32 color, float thickness
+    ) {
+	list->AddLine(
+	    ImVec2(x1,y1), ImVec2(x2,y2),
+	    color, thickness
+	);
+    }
+
+    static void AddRect(
+	ImDrawList* list,
+	float x1, float y1, float x2, float y2,
+	Numeric::uint32 color, float rounding, int rounding_corners,
+	float thickness
+    ) {
+	list->AddRect(
+	    ImVec2(x1,y1), ImVec2(x2,y2), color, rounding,
+	    ImDrawCornerFlags(rounding_corners), thickness
+	);
+    }
+
+    static void AddRectFilled(
+	ImDrawList* list,
+	float x1, float y1, float x2, float y2,
+	Numeric::uint32 color, float rounding, int rounding_corners
+    ) {
+	list->AddRectFilled(
+	    ImVec2(x1,y1), ImVec2(x2,y2), color, rounding,
+	    ImDrawCornerFlags(rounding_corners)
+	);
+    }
+
+    static void AddRectFilledMultiColor(
+	ImDrawList* list,
+	float x1, float y1, float x2, float y2,
+	Numeric::uint32 color1,	Numeric::uint32 color2,
+	Numeric::uint32 color3,	Numeric::uint32 color4
+    ) {
+	list->AddRectFilledMultiColor(
+	    ImVec2(x1,y1), ImVec2(x2,y2),	    
+	    color1, color2, color3, color4
+	);
+    }
+
+    static void AddQuad(
+	ImDrawList* list,
+	float x1, float y1, float x2, float y2,
+	float x3, float y3, float x4, float y4,	
+	Numeric::uint32 color,
+	float thickness
+    ) {
+	list->AddQuad(
+	    ImVec2(x1,y1), ImVec2(x2,y2), ImVec2(x3,y3), ImVec2(x4,y4),	    
+	    color, thickness
+	);
+    }
+
+    static void AddQuadFilled(
+	ImDrawList* list, float x1, float y1, float x2, float y2,
+	float x3, float y3, float x4, float y4,	Numeric::uint32 color
+    ) {
+	list->AddQuad(
+	    ImVec2(x1,y1), ImVec2(x2,y2), ImVec2(x3,y3), ImVec2(x4,y4), color
+	);
+    }
+
+    static void AddTriangle(
+	ImDrawList* list, float x1, float y1, float x2, float y2,
+	float x3, float y3, Numeric::uint32 color, float thickness
+    ) {
+	list->AddTriangle(
+	    ImVec2(x1,y1), ImVec2(x2,y2), ImVec2(x3,y3), color, thickness
+	);
+    }
+
+    static void AddTriangleFilled(
+	ImDrawList* list, float x1, float y1, float x2, float y2,
+	float x3, float y3, Numeric::uint32 color
+    ) {
+	list->AddTriangleFilled(ImVec2(x1,y1), ImVec2(x2,y2), ImVec2(x3,y3), color);
+    }
+
+    static void AddCircle(
+	ImDrawList* list, float x, float y, float radius, Numeric::uint32 color,
+	int num_segments, float thickness
+    ) {
+	list->AddCircle(ImVec2(x,y), radius, color, num_segments, thickness);
+    }
+
+    static void AddCircleFilled(
+	ImDrawList* list, float x, float y, float radius, Numeric::uint32 color,
+	int num_segments
+    ) {
+	list->AddCircleFilled(ImVec2(x,y), radius, color, num_segments);
+    }
+
+    static void AddText(
+	ImDrawList* list, float x, float y, index_t color, const char* text
+    ) {
+	list->AddText(ImVec2(x,y), color, text);
+    }
+
+    static void AddText2(
+	ImDrawList* list, index_t font, float font_size, float x, float y,
+	index_t color, const char* text
+    ) {
+	if(int(font) >= ImGui::GetIO().Fonts->Fonts.size()) {
+	    return;
+	}
+	ImFont* imfont = ImGui::GetIO().Fonts->Fonts[int(font)];
+	list->AddText(imfont, font_size, ImVec2(x,y), color, text);
+    }
+
+    static void AddBezierCurve(
+	ImDrawList* list, float x1, float y1, float x2, float y2,
+	float x3, float y3, float x4, float y4, index_t color,
+	float thickness, int num_segments
+    ) {
+	list->AddBezierCurve(
+	    ImVec2(x1,y1), ImVec2(x2,y2), ImVec2(x3,y3), ImVec2(x4,y4),
+	    color, thickness, num_segments
+	);
+    }
+
+    static void AddImage(
+	ImDrawList* list, index_t id,
+	float x1, float y1, float x2, float y2,
+	float u1, float v1, float u2, float v2,
+	index_t color
+    ) {
+	union {
+	    ImTextureID im_texture_id;
+	    index_t gl_texture_id;
+	};
+	gl_texture_id = id;
+	list->AddImage(
+	    im_texture_id,
+	    ImVec2(x1,y1), ImVec2(x2,y2),
+	    ImVec2(u1,v1), ImVec2(u2,v2),
+	    color
+	);
+    }
+
+    static void AddImageRounded(
+	ImDrawList* list, index_t id,
+	float x1, float y1, float x2, float y2,
+	float u1, float v1, float u2, float v2,
+	index_t color, float rounding, int rounding_corners
+    ) {
+	union {
+	    ImTextureID im_texture_id;
+	    index_t gl_texture_id;
+	};
+	gl_texture_id = id;
+	list->AddImageRounded(
+	    im_texture_id,
+	    ImVec2(x1,y1), ImVec2(x2,y2),
+	    ImVec2(u1,v1), ImVec2(u2,v2),
+	    color, rounding, ImDrawCornerFlags(rounding_corners)
+	);
+    }
+
+    static void PathClear(ImDrawList* list) {
+	list->PathClear();
+    }
+
+    static void PathLineTo(ImDrawList* list, float x, float y) {
+	list->PathLineTo(ImVec2(x,y));
+    }
+
+    static void PathLineToMergeDuplicate(ImDrawList* list, float x, float y) {
+	list->PathLineToMergeDuplicate(ImVec2(x,y));
+    }
+
+    static void PathFillConvex(ImDrawList* list, index_t color) {
+	list->PathFillConvex(color);
+    }
+
+    static void PathStroke(
+	ImDrawList* list, index_t color, bool closed, float thickness
+    ) {
+	list->PathStroke(color, closed, thickness);
+    }
+
+    static void PathArcTo(
+	ImDrawList* list, float cx, float cy, float radius, float a1, float a2,
+	int num_segments
+    ) {
+	list->PathArcTo(ImVec2(cx,cy), radius, a1, a2, num_segments);
+    }
+
+    static void PathArcToFast(
+	ImDrawList* list, float cx, float cy, float radius, int a1, int a2
+    ) {
+	list->PathArcToFast(ImVec2(cx,cy), radius, a1, a2);
+    }
+
+    static void PathBezierCurveTo(
+	ImDrawList* list,
+	float x1, float y1, float x2, float y2, float x3, float y3,
+	int num_segments
+    ) {
+	list->PathBezierCurveTo(
+	    ImVec2(x1,y1), ImVec2(x2,y2), ImVec2(x3,y3), num_segments
+	);
+    }
+
+    static void PathRect(
+	ImDrawList* list,
+	float x1, float y1, float x2, float y2,
+	float rounding, int rounding_corners	
+    ) {
+	list->PathRect(
+	    ImVec2(x1,y1), ImVec2(x2,y2),
+	    rounding, ImDrawCornerFlags(rounding_corners)
+	);
+    }
+}
+
+
+#define DECLARE_IMGUI_CONSTANT(C) \
+	lua_pushinteger(L,C);     \
+	lua_setglobal(L,#C)
+
 
 void init_lua_imgui(lua_State* L) {
     lState = L;
     LoadImguiBindings();
 
-    lua_pushinteger(L, ImGuiExtFileDialogFlags_Load);
-    lua_setglobal(L,"ImGuiExtFileDialogFlags_Load");
+    DECLARE_IMGUI_CONSTANT(ImGuiExtFileDialogFlags_Load);
+    DECLARE_IMGUI_CONSTANT(ImGuiExtFileDialogFlags_Save);
+    DECLARE_IMGUI_CONSTANT(ImGuiCond_Always);
+    DECLARE_IMGUI_CONSTANT(ImGuiCond_Once);
+    DECLARE_IMGUI_CONSTANT(ImGuiCond_FirstUseEver);
+    DECLARE_IMGUI_CONSTANT(ImGuiCond_Appearing);
+    DECLARE_IMGUI_CONSTANT(ImGuiSelectableFlags_AllowDoubleClick);
 
-    lua_pushinteger(L, ImGuiExtFileDialogFlags_Save);
-    lua_setglobal(L,"ImGuiExtFileDialogFlags_Save");
-
-    lua_pushinteger(L, ImGuiCond_Always);
-    lua_setglobal(L,"ImGuiCond_Always");
-
-    lua_pushinteger(L, ImGuiCond_Once);
-    lua_setglobal(L,"ImGuiCond_Once");
-
-    lua_pushinteger(L, ImGuiCond_FirstUseEver);
-    lua_setglobal(L,"ImGuiCond_FirstUseEver");
-    
-    lua_pushinteger(L, ImGuiCond_Appearing);
-    lua_setglobal(L,"ImGuiCond_Appearing");
-
-    lua_pushinteger(L, ImGuiSelectableFlags_AllowDoubleClick);
-    lua_setglobal(L, "ImGuiSelectableFlags_AllowDoubleClick");    
-
-    lua_pushinteger(L, ImGuiCol_Button);
-    lua_setglobal(L, "ImGuiCol_Button");    
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_Text);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_TextDisabled);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_WindowBg);              
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_ChildBg);               
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_PopupBg);               
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_Border);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_BorderShadow);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_FrameBg);               
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_FrameBgHovered);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_FrameBgActive);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_TitleBg);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_TitleBgActive);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_TitleBgCollapsed);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_MenuBarBg);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_ScrollbarBg);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_ScrollbarGrab);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_ScrollbarGrabHovered);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_ScrollbarGrabActive);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_CheckMark);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_SliderGrab);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_SliderGrabActive);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_Button);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_ButtonHovered);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_ButtonActive);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_Header);                
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_HeaderHovered);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_HeaderActive);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_Separator);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_SeparatorHovered);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_SeparatorActive);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_ResizeGrip);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_ResizeGripHovered);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_ResizeGripActive);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_Tab);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_TabHovered);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_TabActive);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_TabUnfocused);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_TabUnfocusedActive);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_DockingPreview);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_DockingEmptyBg);        
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_PlotLines);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_PlotLinesHovered);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_PlotHistogram);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_PlotHistogramHovered);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_TextSelectedBg);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_DragDropTarget);
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_NavHighlight);          
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_NavWindowingHighlight); 
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_NavWindowingDimBg);     
+    DECLARE_IMGUI_CONSTANT(ImGuiCol_ModalWindowDimBg);      
     
     lua_getglobal(L, "imgui");
 
@@ -668,6 +1047,64 @@ void init_lua_imgui(lua_State* L) {
     lua_pushcfunction(L,wrapper_BeginTabItem);
     lua_settable(L,-3);
 
+    lua_pushliteral(L,"SimpleButton");
+    lua_pushcfunction(L,wrapper_SimpleButton);
+    lua_settable(L,-3);
+
+    lua_pushliteral(L,"GetMousePos");
+    lua_pushcfunction(L,wrapper_GetMousePos);
+    lua_settable(L,-3);
+    
+    /*****************************************************************/
+    
+    lua_bindwrapper(L,ImGui::GetWindowDrawList);
+    lua_bindwrapper(L,ImGuiDrawAdapters::GetBackgroundDrawList);
+    lua_bindwrapper(L,ImGuiDrawAdapters::GetForegroundDrawList);
+    
+    lua_bindwrapper(L,ImGuiDrawAdapters::PushClipRect);
+    lua_bindwrapper(L,ImGuiDrawAdapters::PushClipRectFullScreen);    
+    lua_bindwrapper(L,ImGuiDrawAdapters::PopClipRect);
+    
+    lua_bindwrapper(L,ImGuiDrawAdapters::PushTextureID);
+    lua_bindwrapper(L,ImGuiDrawAdapters::PopTextureID);
+    
+    lua_bindwrapper(L,ImGuiDrawAdapters::AddLine);
+    lua_bindwrapper(L,ImGuiDrawAdapters::AddRect);
+    lua_bindwrapper(L,ImGuiDrawAdapters::AddRectFilled);
+    lua_bindwrapper(L,ImGuiDrawAdapters::AddRectFilledMultiColor);            
+    lua_bindwrapper(L,ImGuiDrawAdapters::AddQuad);
+    lua_bindwrapper(L,ImGuiDrawAdapters::AddQuadFilled);
+    lua_bindwrapper(L,ImGuiDrawAdapters::AddTriangle);
+    lua_bindwrapper(L,ImGuiDrawAdapters::AddTriangleFilled);
+    lua_bindwrapper(L,ImGuiDrawAdapters::AddCircle);
+    lua_bindwrapper(L,ImGuiDrawAdapters::AddCircleFilled);
+    lua_bindwrapper(L,ImGuiDrawAdapters::AddText);
+    lua_bindwrapper(L,ImGuiDrawAdapters::AddText2);
+    lua_bindwrapper(L,ImGuiDrawAdapters::AddBezierCurve);
+    lua_bindwrapper(L,ImGuiDrawAdapters::AddImage);
+    lua_bindwrapper(L,ImGuiDrawAdapters::AddImageRounded);         
+    lua_bindwrapper(L,ImGuiDrawAdapters::PathClear);
+    lua_bindwrapper(L,ImGuiDrawAdapters::PathLineTo);
+    lua_bindwrapper(L,ImGuiDrawAdapters::PathLineToMergeDuplicate);
+    lua_bindwrapper(L,ImGuiDrawAdapters::PathFillConvex);
+    lua_bindwrapper(L,ImGuiDrawAdapters::PathStroke);
+    lua_bindwrapper(L,ImGuiDrawAdapters::PathArcTo);
+    lua_bindwrapper(L,ImGuiDrawAdapters::PathArcToFast);        
+    lua_bindwrapper(L,ImGuiDrawAdapters::PathBezierCurveTo);
+    lua_bindwrapper(L,ImGuiDrawAdapters::PathRect);                
+    
     lua_pop(L,1);
+
+    DECLARE_IMGUI_CONSTANT(ImDrawCornerFlags_None);
+    DECLARE_IMGUI_CONSTANT(ImDrawCornerFlags_TopLeft);
+    DECLARE_IMGUI_CONSTANT(ImDrawCornerFlags_TopRight);
+    DECLARE_IMGUI_CONSTANT(ImDrawCornerFlags_BotLeft);
+    DECLARE_IMGUI_CONSTANT(ImDrawCornerFlags_BotRight);
+    DECLARE_IMGUI_CONSTANT(ImDrawCornerFlags_Top);
+    DECLARE_IMGUI_CONSTANT(ImDrawCornerFlags_Bot);
+    DECLARE_IMGUI_CONSTANT(ImDrawCornerFlags_Left);
+    DECLARE_IMGUI_CONSTANT(ImDrawCornerFlags_Right);
+    DECLARE_IMGUI_CONSTANT(ImDrawCornerFlags_All);
+    
 }
 
